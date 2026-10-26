@@ -1,0 +1,24 @@
+# Fichiers locaux et secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+*.vdi
+*.vmdk
+*.vhd*
+*.ova
+*.ovf
+*.iso
+*.docx
+*.pdf
+backups/
+exports/
+credentials*
