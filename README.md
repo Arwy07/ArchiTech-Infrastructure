@@ -4,11 +4,9 @@ Projet pédagogique pour un cabinet fictif d'architecture et de BTP de 25 collab
 
 **Aucune VM n'est fournie.** Ce guide explique comment reconstruire le laboratoire depuis des ISO officiels. Les mots de passe, comptes réels, disques, instantanés et exports de configuration ne sont pas publiés.
 
-## Ce qui vient du projet et ce que propose ce guide
+## Présentation
 
-Le dossier technique historique décrit pfSense, Windows Server 2022, deux clients, un poste admin et un serveur de sauvegarde. Il fournit le domaine `architect.local` et trois sous-réseaux. Il contient aussi des incohérences de réseaux VirtualBox et des règles trop permissives.
-
-Ce README propose une reconstruction cohérente avec des réseaux internes nommés et des règles explicites. Les ressources VM et la plage DHCP ci-dessous sont des choix pour cette reconstruction. Les étapes n'ont pas été rejouées de bout en bout sur des VM pendant la publication : les résultats attendus ne constituent pas des tests déjà réussis.
+L'infrastructure repose sur pfSense, deux serveurs Windows, deux postes clients et un poste d'administration. Le domaine est `architect.local` et les trois segments utilisent des réseaux internes VirtualBox distincts. Les étapes ci-dessous donnent les paramètres nécessaires pour créer son propre laboratoire.
 
 ## 1. Ce qu'on va construire
 
@@ -40,7 +38,7 @@ Installer [VirtualBox](https://www.virtualbox.org/), télécharger les médias d
 
 Prévoir la virtualisation matérielle activée, de l'espace pour les disques et instantanés, et assez de RAM. Pour lancer les six VM avec les allocations proposées, viser 32 Go de RAM hôte et environ 250 à 350 Go libres ; arrêter les postes secondaires pendant la préparation si nécessaire.
 
-Windows Server doit être installé avec **Desktop Experience** pour suivre les consoles graphiques. Les postes doivent utiliser une édition permettant la jointure de domaine, telle que Pro ou Enterprise, pas Home. Le projet initial utilisait Windows 10 ; pour une nouvelle reconstruction choisir des versions prises en charge et respecter leurs prérequis, notamment TPM/UEFI pour Windows 11.
+Windows Server doit être installé avec **Desktop Experience** pour suivre les consoles graphiques. Les postes doivent utiliser une édition permettant la jointure de domaine, telle que Pro ou Enterprise, pas Home. Choisir des versions Windows prises en charge et respecter leurs prérequis, notamment TPM/UEFI pour Windows 11.
 
 | VM | CPU proposés | RAM proposée | Disque proposé |
 |---|---:|---:|---:|
@@ -69,7 +67,7 @@ Créer chaque VM avec **Nouvelle**, sélectionner l'OS et l'ISO, choisir une ins
 
 Les noms doivent être identiques sur les machines d'un même segment. Désactiver les autres cartes Windows : une carte NAT directe contournerait FW1. Ne pas créer de redirection de port sur le NAT de VirtualBox. L'hôte n'a pas besoin d'une carte dans ces réseaux internes ; l'administration se fait depuis POSTEADMIN.
 
-Ce choix évite les conflits d'IP entre une carte hôte et les passerelles du dossier d'origine. [Documentation réseau VirtualBox](https://www.virtualbox.org/manual/ch06.html).
+Chaque réseau interne utilise pfSense comme passerelle, sans carte réseau de l'hôte sur le segment. [Documentation réseau VirtualBox](https://www.virtualbox.org/manual/ch06.html).
 
 ## 4. Installer et configurer FW1
 
@@ -160,7 +158,7 @@ Get-DhcpServerInDC
 Get-DhcpServerv4Scope
 ```
 
-La plage .100–.150 évite les anciennes adresses fixes de clients. Vérifier que le serveur est autorisé, l'étendue active et l'écoute liée à sa carte interne. Compléter la postconfiguration si la console DHCP la signale. [Guide DHCP Microsoft](https://learn.microsoft.com/en-us/windows-server/networking/technologies/dhcp/quickstart-install-configure-dhcp-server).
+La plage .100–.150 est réservée aux clients DHCP. Vérifier que le serveur est autorisé, l'étendue active et l'écoute liée à sa carte interne. Compléter la postconfiguration si la console DHCP la signale. [Guide DHCP Microsoft](https://learn.microsoft.com/en-us/windows-server/networking/technologies/dhcp/quickstart-install-configure-dhcp-server).
 
 Sur FW1, dans **Services → DHCP Relay**, désactiver les serveurs DHCP locaux, activer le relais sur CLI et mettre `192.168.2.10` en serveur amont. ADMIN et SRV restent statiques. Les intitulés varient selon la version ; voir le [relais DHCP Netgate](https://docs.netgate.com/pfsense/en/latest/services/dhcp/relay.html).
 
@@ -209,11 +207,11 @@ Depuis un client avec un compte autorisé, ouvrir `\\SRV1\Architectes` dans l'Ex
 Install-WindowsFeature Web-Server -IncludeManagementTools
 ```
 
-Vérifier le site par défaut dans **Gestionnaire IIS**. Depuis POSTE1, ouvrir `http://SRV1.architect.local` : la page IIS doit apparaître si TCP 80 est autorisé. IIS sur le contrôleur de domaine reprend le scénario étudiant ; séparer ces rôles pour une architecture réelle.
+Vérifier le site par défaut dans **Gestionnaire IIS**. Depuis POSTE1, ouvrir `http://SRV1.architect.local` : la page IIS doit apparaître si TCP 80 est autorisé. Ce laboratoire rassemble ces rôles sur SRV1 pour réduire le nombre de VM.
 
 ### Politiques de groupe et RDP
 
-Sur SRV1, ouvrir **Gestion de stratégie de groupe → Forêt → Domaines → architect.local**. Modifier la stratégie de domaine prévue pour les comptes, puis ouvrir **Configuration ordinateur → Stratégies → Paramètres Windows → Paramètres de sécurité → Stratégies de comptes → Stratégie de mot de passe**. Le dossier historique prévoyait : minimum 10 caractères, complexité activée, historique 5, durée minimale 1 jour, maximale 90 jours. Ce sont des paramètres historiques, pas une validation de conformité actuelle.
+Sur SRV1, ouvrir **Gestion de stratégie de groupe → Forêt → Domaines → architect.local**. Modifier la stratégie de domaine prévue pour les comptes, puis ouvrir **Configuration ordinateur → Stratégies → Paramètres Windows → Paramètres de sécurité → Stratégies de comptes → Stratégie de mot de passe**. La politique du scénario prévoit : minimum 10 caractères, complexité activée, historique 5, durée minimale 1 jour, maximale 90 jours. Ces valeurs définissent la politique du scénario pédagogique.
 
 Pour des réglages propres aux postes, clic droit sur l'OU Postes → **Créer un objet GPO dans ce domaine et le lier ici**, le nommer et modifier uniquement les paramètres choisis pour le laboratoire. Une GPO de mot de passe de comptes du domaine doit s'appliquer au niveau du domaine ; la lier seulement à l'OU des utilisateurs ne remplace pas cette politique. Contrôler le périmètre et les résultats. Sur un client :
 
@@ -250,26 +248,18 @@ Copier le script dans `C:\Scripts\backup.ps1`. Dans **Planificateur de tâches �
 
 Dossier de départ : `C:\Scripts`. Si la tâche fonctionne hors session, renseigner ses informations d'ouverture de session dans Windows, jamais dans les arguments ou le dépôt. Tester avec **Exécuter** et vérifier le résultat et les fichiers créés.
 
-Les horaires historiques étaient 23 h, 23 h 10 et 23 h 20 pour les trois machines. Les adapter à son essai. La rétention historique de sept jours **n'est pas implémentée** dans le script remanié : il ne supprime aucune copie. Prévoir séparément la rétention et surveiller l'espace disque. [Détails du script](scripts/README.md).
+Planifier par exemple les tâches à 23 h, 23 h 10 et 23 h 20 pour répartir les copies. Le script conserve les copies sans suppression automatique. Prévoir séparément la rétention et surveiller l'espace disque. [Détails du script](scripts/README.md).
 
-## 12. Vérifier que tout fonctionne
+## 12. Utiliser le laboratoire
 
-| Test | Résultat attendu |
-|---|---|
-| ipconfig /all sur POSTE1 | Bail CLI, passerelle .1.1, DNS .2.10 |
-| Resolve-DnsName SRV1.architect.local | 192.168.2.10 |
-| Connexion avec le compte fictif du domaine | Session ouverte |
-| gpresult /r | GPO attendues appliquées |
-| Partage Architectes avec un membre du groupe | Lecture et écriture possibles |
-| Même partage avec un compte hors groupe | Refus |
-| http://SRV1.architect.local depuis POSTE1 | Page IIS |
-| Administration FW1 et RDP prévus depuis POSTEADMIN | Autorisés |
-| Administration FW1 depuis CLI | Refusée et blocage vérifié dans les journaux |
-| Test-NetConnection 192.168.3.10 -Port 3389 depuis POSTE1 | False, avec refus réseau vérifié |
-| Sauvegarde puis restauration d'un témoin | Copie lisible et contenu identique |
-| Redémarrage ordonné | Services à nouveau disponibles |
+- Ouvrir une session sur POSTE1 ou POSTE2 avec un utilisateur du domaine.
+- Utiliser `\\\\SRV1\\Architectes` pour les fichiers du groupe Architectes.
+- Ouvrir `http://SRV1.architect.local` pour accéder au site interne.
+- Administrer pfSense depuis POSTEADMIN avec `https://192.168.3.1`.
+- Utiliser les consoles AD, DNS et DHCP sur SRV1 pour gérer les comptes et services.
+- Lancer ou planifier le script de sauvegarde sous une identité autorisée au partage de SRV-BACK.
 
-Un test négatif peut échouer parce que le service cible est arrêté : examiner les journaux et vérifier le service pour démontrer le filtrage. Compléter [docs/recette.md](docs/recette.md) avec une date et les résultats réellement observés ; ces attentes ne sont pas des résultats acquis.
+Les accès dépendent des groupes et des règles configurés aux étapes précédentes. Pour retrouver les paramètres d'une machine, utiliser `ipconfig /all` ; pour consulter les stratégies appliquées, utiliser `gpresult /r`.
 
 ## Dépannage et exploitation
 
@@ -286,17 +276,15 @@ Un test négatif peut échouer parce que le service cible est arrêté : examine
 
 Démarrer FW1 puis SRV1 ; attendre AD/DNS/DHCP, démarrer SRV-BACK puis les postes. Arrêter proprement dans l'ordre inverse. Conserver les instantanés, exports et sauvegardes en privé ; un instantané ne remplace pas une sauvegarde indépendante.
 
-## Contenu et provenance
+## Contenu du dépôt
 
 | Chemin | Contenu |
 |---|---|
-| README.md | Reconstruction complète proposée |
-| [docs/architecture.md](docs/architecture.md) | Architecture et paramètres historiques |
-| [docs/securite-et-limites.md](docs/securite-et-limites.md) | Écarts et limites identifiés |
-| [docs/recette.md](docs/recette.md) | Plan de tests à compléter |
-| [scripts/backup.ps1](scripts/backup.ps1) | Copie de dossiers remaniée sans secret |
-| [VALIDATION.md](VALIDATION.md) | Vérifications effectuées lors de l'import |
+| README.md | Création des VM, configuration et utilisation du laboratoire |
+| [scripts/backup.ps1](scripts/backup.ps1) | Script de copie sans secret intégré |
+| [scripts/README.md](scripts/README.md) | Paramètres et utilisation du script |
+| .gitignore | Exclusion des secrets, disques virtuels et sauvegardes |
 
-Projet collectif ; le dossier attribue à Arwy07 le réseau, pfSense, les VM et les scripts. Les autres contributions concernent Windows, la sécurité et la sauvegarde/documentation. Les identités d'étudiants et annexes brutes sont exclues.
+Projet collectif réalisé dans un cadre pédagogique. Contribution d'Arwy07 : infrastructure réseau, pfSense, machines virtuelles et scripts. Les autres contributions portent sur les services Windows, la sécurité et la sauvegarde/documentation.
 
-Les VM sont absentes ; aucune validation actuelle de bout en bout n'est revendiquée. Le script a seulement fait l'objet d'un contrôle syntaxique et d'une simulation locale. Les versions et interfaces exactes choisies peuvent nécessiter des adaptations lors de la reconstruction.
+Les images de VM et les médias d'installation ne sont pas distribués : chaque utilisateur crée ses machines à partir de ses propres médias et licences.
